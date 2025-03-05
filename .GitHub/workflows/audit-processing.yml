@@ -1,0 +1,26 @@
+name: Process Audit Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      audit_file:
+        description: 'Audit CSV File Path'
+        required: true
+
+jobs:
+  process-audit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v3
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas numpy
+    
+    - name: Process Audit
+      run: python scripts/process_audit.py ${{ github.event.inputs.audit_file }}
