@@ -257,6 +257,7 @@
             </table>
         </div>
         <button id="newAudit">Start New Audit</button>
+<button id="downloadResults" style="background-color: #27ae60;">Download Results CSV</button>
     </div>
 
     <script>
@@ -293,11 +294,13 @@
             document.getElementById('continueToEPT').addEventListener('click', () => showStep(3));
             document.getElementById('startAudit').addEventListener('click', startAudit);
             document.getElementById('newAudit').addEventListener('click', () => {
-                resetApp();
-                showStep(1);
-            });
-            
-            // Score buttons
+    resetApp();
+    showStep(1);
+});
+
+document.getElementById('downloadResults').addEventListener('click', downloadResultsCSV);
+
+// Score buttons
             const scoreButtons = document.querySelectorAll('.score-button');
             scoreButtons.forEach(button => {
                 button.addEventListener('click', handleScoreSelection);
@@ -634,6 +637,77 @@
             maxTasksInput.value = '8';
             auditPercentageInput.value = '25';
         }
+        
+        // Function to download results as CSV
+function downloadResultsCSV() {
+    if (!fileData || !tasksToAudit || tasksToAudit.length === 0) {
+        alert('No audit data available to download.');
+        return;
+    }
+    
+    // Create a copy of the original data
+    const enhancedData = JSON.parse(JSON.stringify(fileData));
+    
+    // Add new columns for CE, INT, and ALI scores
+    enhancedData.forEach(row => {
+        row.CE_Score = '';
+        row.INT_Score = '';
+        row.ALI_Score = '';
+    });
+    
+    // Map of rowIndex to task audit data
+    const auditedRowsMap = {};
+    
+    // Populate the map with audit data
+    tasksToAudit.forEach(taskAudit => {
+        const rowIndex = taskAudit.task.rowIndex;
+        if (taskAudit.auditData.CE !== null) {
+            auditedRowsMap[rowIndex] = {
+                CE: taskAudit.auditData.CE,
+                INT: taskAudit.auditData.INT,
+                ALI: taskAudit.auditData.ALI
+            };
+        }
+    });
+    
+    // Add audit scores to the enhanced data
+    enhancedData.forEach((row, index) => {
+        if (auditedRowsMap[index]) {
+            row.CE_Score = auditedRowsMap[index].CE;
+            row.INT_Score = auditedRowsMap[index].INT;
+            row.ALI_Score = auditedRowsMap[index].ALI;
+        }
+    });
+    
+    // Convert data to CSV
+    const headers = Object.keys(enhancedData[0]);
+    let csvContent = headers.join(',') + '\n';
+    
+    enhancedData.forEach(row => {
+        const values = headers.map(header => {
+            const value = row[header] || '';
+            // Handle values with commas by wrapping in quotes
+            if (value.toString().includes(',')) {
+                return `"${value}"`;
+            }
+            return value;
+        });
+        csvContent += values.join(',') + '\n';
+    });
+    
+    // Create download link
+    const encodedUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'audit_results.csv');
+    document.body.appendChild(link);
+    
+    // Trigger download
+    link.click();
+    
+    // Clean up
+    document.body.removeChild(link);
+}
     </script>
 </body>
 </html>
