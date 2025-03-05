@@ -714,22 +714,20 @@
                 // Get the original column headers
                 const originalHeaders = Object.keys(fileData[0]);
                 
-                // Create the new headers by adding our audit columns
-                const newHeaders = [...originalHeaders, 'CE_Score', 'INT_Score', 'ALI_Score'];
+                // Create the new headers by adding our audit columns at the beginning
+                const newHeaders = ['CE_Score', 'INT_Score', 'ALI_Score', ...originalHeaders];
                 
                 // Create a map to quickly look up audit data by row index
                 const auditDataByRow = {};
                 
                 tasksToAudit.forEach(task => {
-                    if (task.auditData.CE !== null) {
-                        // Store audit data with the row index as the key
-                        const rowIndex = task.task.rowIndex;
-                        auditDataByRow[rowIndex] = {
-                            CE: task.auditData.CE,
-                            INT: task.auditData.INT,
-                            ALI: task.auditData.ALI
-                        };
-                    }
+                    // Store audit data with the row index as the key
+                    const rowIndex = task.task.rowIndex;
+                    auditDataByRow[rowIndex] = {
+                        CE: task.auditData.CE !== null ? task.auditData.CE : '',
+                        INT: task.auditData.INT !== null ? task.auditData.INT : '',
+                        ALI: task.auditData.ALI !== null ? task.auditData.ALI : ''
+                    };
                 });
                 
                 // Start building the CSV content with the headers
@@ -737,43 +735,59 @@
                 
                 // Add each row of data
                 fileData.forEach((row, index) => {
-                    // Get the values for existing columns
-                    const rowValues = originalHeaders.map(header => {
-                        const cellValue = row[header] !== undefined ? row[header] : '';
-                        // Escape commas and quotes
-                        if (cellValue && (String(cellValue).includes(',') || String(cellValue).includes('"'))) {
-                            return `"${String(cellValue).replace(/"/g, '""')}"`;
-                        }
-                        return cellValue;
-                    });
+                    const rowValues = [];
                     
-                    // Add the audit scores if this row was audited
+                    // First add the audit scores if this row was audited
                     const auditData = auditDataByRow[index];
                     if (auditData) {
-                        rowValues.push(auditData.CE || '');
-                        rowValues.push(auditData.INT || '');
-                        rowValues.push(auditData.ALI || '');
+                        rowValues.push(auditData.CE);
+                        rowValues.push(auditData.INT);
+                        rowValues.push(auditData.ALI);
                     } else {
                         // Add empty values for non-audited rows
                         rowValues.push('', '', '');
                     }
                     
+                    // Then add the original data
+                    originalHeaders.forEach(header => {
+                        const cellValue = row[header] !== undefined ? row[header] : '';
+                        // Escape commas and quotes
+                        if (cellValue && (String(cellValue).includes(',') || String(cellValue).includes('"'))) {
+                            rowValues.push(`"${String(cellValue).replace(/"/g, '""')}"`);
+                        } else {
+                            rowValues.push(cellValue);
+                        }
+                    });
+                    
                     // Add the row to the CSV content
                     csvContent += rowValues.join(',') + '\\n';
                 });
                 
-                // Create and trigger the download
+                // Create and trigger the download using a better approach
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
-                link.setAttribute('href', url);
-                link.setAttribute('download', 'audit_results.csv');
-                link.style.visibility = 'hidden';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
                 
-                console.log('CSV download complete');
+                // Set download attributes
+                if (window.navigator.msSaveOrOpenBlob) {
+                    // For IE
+                    window.navigator.msSaveBlob(blob, 'audit_results.csv');
+                } else {
+                    // For other browsers
+                    const url = URL.createObjectURL(blob);
+                    link.href = url;
+                    link.download = 'audit_results.csv';
+                    link.style.display = 'none';
+                    document.body.appendChild(link);
+                    link.click();
+                    
+                    // Cleanup
+                    setTimeout(() => {
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                    }, 100);
+                }
+                
+                console.log('CSV download complete with audit columns at the beginning');
             } catch (error) {
                 console.error('Error generating CSV:', error);
                 alert('There was an error generating the CSV file. Please check the console for details.');
