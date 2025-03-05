@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Worker Audit Application</title>
+    <!-- Include PapaParse for CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #f2f2f2;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        input[type="file"], input[type="number"] {
+            padding: 8px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .score-button {
+            margin-right: 10px;
+            margin-bottom: 5px;
+            background-color: white;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+        
+        .score-button.selected {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .task-details {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        
+        .worker-entry {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .worker-entry label {
+            width: 50%;
+            font-weight: bold;
+        }
+        
+        .worker-entry input {
+            width: 50%;
+        }
+        
+        .config-entry {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .config-entry label {
+            width: 50%;
+        }
+        
+        .config-entry input {
+            width: 50%;
+        }
+        
+        .step {
+            display: none;
+        }
+        
+        .active-step {
+            display: block;
+        }
+        
+        .progress {
+            color: #777;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+        
+        .results-table th {
+            text-align: center;
+        }
+        
+        .results-table td {
+            text-align: center;
+        }
+        
+        .results-table .worker-name {
+            text-align: left;
+        }
+        
+        .overall-score {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Worker Audit Application</h1>
+    
+    <!-- Step 1: File Upload -->
+    <div id="step1" class="container step active-step">
+        <h2>Upload Worker Data</h2>
+        <p>Please upload a CSV file containing worker task data.</p>
+        <input type="file" id="csvFile" accept=".csv">
+        <div id="fileError" style="color: red; margin-top: 10px;"></div>
+    </div>
+    
+    <!-- Step 2: Worker Identification -->
+    <div id="step2" class="container step">
+        <h2>Workers Identified</h2>
+        <p>The following workers were identified in the uploaded file:</p>
+        <ul id="workersList"></ul>
+        <button id="continueToEPT">Continue</button>
+    </div>
+    
+    <!-- Step 3: Expected Throughput -->
+    <div id="step3" class="container step">
+        <h2>Expected Throughput & Audit Configuration</h2>
+        
+        <div style="margin-bottom: 20px;">
+            <h3>Enter Expected Throughput (EPT) for each worker:</h3>
+            <div id="workerEPTInputs"></div>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            <h3>Audit Configuration:</h3>
+            <div class="config-entry">
+                <label for="maxTasks">Maximum tasks to audit per worker:</label>
+                <input type="number" id="maxTasks" min="1" value="8">
+            </div>
+            <div class="config-entry">
+                <label for="auditPercentage">Percentage of tasks to audit:</label>
+                <input type="number" id="auditPercentage" min="1" max="100" value="25">
+            </div>
+        </div>
+        
+        <button id="startAudit">Start Audit</button>
+    </div>
+    
+    <!-- Step 4: Conduct Audit -->
+    <div id="step4" class="container step">
+        <h2 id="auditProgress"></h2>
+        
+        <div>
+            <h3>Task Details:</h3>
+            <div id="taskDetails" class="task-details"></div>
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+            <h3>Question #1: CE score?</h3>
+            <div>
+                <button class="score-button ce-score" data-score="1">1</button>
+                <button class="score-button ce-score" data-score="2">2</button>
+                <button class="score-button ce-score" data-score="3">3</button>
+            </div>
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+            <h3>Question #2: INT score?</h3>
+            <div>
+                <button class="score-button int-score" data-score="1">1</button>
+                <button class="score-button int-score" data-score="2">2</button>
+            </div>
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+            <h3>Question #3: ALI score?</h3>
+            <div>
+                <button class="score-button ali-score" data-score="1">1</button>
+                <button class="score-button ali-score" data-score="2">2</button>
+            </div>
+        </div>
+        
+        <div id="taskProgress" class="progress"></div>
+    </div>
+    
+    <!-- Step 5: Results -->
+    <div id="step5" class="container step">
+        <h2>Audit Results</h2>
+        <div style="overflow-x: auto;">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>Worker</th>
+                        <th>Avg CE</th>
+                        <th>Avg INT</th>
+                        <th>Avg ALI</th>
+                        <th>ATP</th>
+                        <th>EPT</th>
+                        <th>PET</th>
+                        <th>PS</th>
+                        <th>Overall Score</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsTable"></tbody>
+            </table>
+        </div>
+        <button id="newAudit">Start New Audit</button>
+    </div>
+
+    <script>
+        // Global variables to store application state
+        let fileData = null;
+        let workers = [];
+        let workerTasks = {};
+        let expectedThroughput = {};
+        let maxTasksPerWorker = 8;
+        let auditPercentage = 25;
+        let tasksToAudit = [];
+        let currentAuditIndex = 0;
+        let auditResults = {};
+        let finalScores = {};
+        
+        // DOM elements
+        const fileInput = document.getElementById('csvFile');
+        const fileError = document.getElementById('fileError');
+        const workersList = document.getElementById('workersList');
+        const workerEPTInputs = document.getElementById('workerEPTInputs');
+        const maxTasksInput = document.getElementById('maxTasks');
+        const auditPercentageInput = document.getElementById('auditPercentage');
+        const auditProgress = document.getElementById('auditProgress');
+        const taskDetails = document.getElementById('taskDetails');
+        const taskProgress = document.getElementById('taskProgress');
+        const resultsTable = document.getElementById('resultsTable');
+        
+        // Set up event listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            // File upload event
+            fileInput.addEventListener('change', handleFileUpload);
+            
+            // Navigation buttons
+            document.getElementById('continueToEPT').addEventListener('click', () => showStep(3));
+            document.getElementById('startAudit').addEventListener('click', startAudit);
+            document.getElementById('newAudit').addEventListener('click', () => {
+                resetApp();
+                showStep(1);
+            });
+            
+            // Score buttons
+            const scoreButtons = document.querySelectorAll('.score-button');
+            scoreButtons.forEach(button => {
+                button.addEventListener('click', handleScoreSelection);
+            });
+            
+            // Input changes
+            maxTasksInput.addEventListener('change', () => {
+                maxTasksPerWorker = parseInt(maxTasksInput.value) || 8;
+            });
+            
+            auditPercentageInput.addEventListener('change', () => {
+                auditPercentage = parseInt(auditPercentageInput.value) || 25;
+            });
+        });
+        
+        // Function to handle file upload
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            fileError.textContent = '';
+            
+            if (!file) return;
+            
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: results => {
+                    fileData = results.data;
+                    
+                    // Extract workers from column A
+                    const workersFound = {};
+                    const firstColumnKey = Object.keys(results.data[0])[0];
+                    
+                    results.data.forEach((row, index) => {
+                        const workerName = row[firstColumnKey];
+                        if (workerName && typeof workerName === 'string' && workerName.trim() !== '') {
+                            if (!workersFound[workerName]) {
+                                workersFound[workerName] = [];
+                            }
+                            workersFound[workerName].push({ ...row, rowIndex: index });
+                        }
+                    });
+                    
+                    workers = Object.keys(workersFound);
+                    workerTasks = workersFound;
+                    
+                    if (workers.length === 0) {
+                        fileError.textContent = 'No workers found in the file. Please check your CSV format.';
+                        return;
+                    }
+                    
+                    // Display workers and their task counts
+                    displayWorkers();
+                    showStep(2);
+                },
+                error: error => {
+                    fileError.textContent = 'Error parsing file: ' + error.message;
+                }
+            });
+        }
+        
+        // Function to display workers
+        function displayWorkers() {
+            workersList.innerHTML = '';
+            
+            workers.forEach(worker => {
+                const li = document.createElement('li');
+                li.textContent = `${worker} - ${workerTasks[worker].length} tasks`;
+                workersList.appendChild(li);
+                
+                // Initialize expected throughput
+                expectedThroughput[worker] = '';
+            });
+            
+            // Create input fields for EPT
+            workerEPTInputs.innerHTML = '';
+            workers.forEach(worker => {
+                const div = document.createElement('div');
+                div.className = 'worker-entry';
+                
+                const label = document.createElement('label');
+                label.textContent = `${worker}:`;
+                label.setAttribute('for', `ept-${worker}`);
+                
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.id = `ept-${worker}`;
+                input.min = '1';
+                input.placeholder = 'Expected tasks';
+                input.addEventListener('change', e => {
+                    expectedThroughput[worker] = e.target.value;
+                });
+                
+                div.appendChild(label);
+                div.appendChild(input);
+                workerEPTInputs.appendChild(div);
+            });
+        }
+        
+        // Function to start the audit
+        function startAudit() {
+            // Validate that all EPT values are entered
+            const missingEPT = Object.values(expectedThroughput).some(value => 
+                value === '' || isNaN(parseInt(value)) || parseInt(value) <= 0
+            );
+            
+            if (missingEPT) {
+                alert('Please enter valid Expected Throughput values for all workers.');
+                return;
+            }
+            
+            // Update configuration values
+            maxTasksPerWorker = parseInt(maxTasksInput.value) || 8;
+            auditPercentage = parseInt(auditPercentageInput.value) || 25;
+            
+            // Select random tasks for audit
+            tasksToAudit = [];
+            
+            Object.entries(workerTasks).forEach(([worker, tasks]) => {
+                // Calculate number of tasks to audit (25% with max 8)
+                const numTasksToAudit = Math.min(
+                    Math.ceil(tasks.length * (auditPercentage / 100)),
+                    maxTasksPerWorker
+                );
+                
+                // Randomly select tasks
+                const shuffled = [...tasks].sort(() => 0.5 - Math.random());
+                const selected = shuffled.slice(0, numTasksToAudit);
+                
+                selected.forEach(task => {
+                    tasksToAudit.push({
+                        worker,
+                        task,
+                        auditData: {
+                            CE: null,
+                            INT: null,
+                            ALI: null
+                        }
+                    });
+                });
+            });
+            
+            // Randomize the order of tasks
+            tasksToAudit.sort(() => 0.5 - Math.random());
+            
+            // Reset current index
+            currentAuditIndex = 0;
+            
+            // Display first task
+            displayCurrentTask();
+            showStep(4);
+        }
+        
+        // Function to display current task
+        function displayCurrentTask() {
+            const currentTask = tasksToAudit[currentAuditIndex];
+            
+            // Update task progress header
+            auditProgress.textContent = `Audit Task ${currentAuditIndex + 1} of ${tasksToAudit.length}`;
+            
+            // Display task details
+            taskDetails.innerHTML = '';
+            Object.entries(currentTask.task)
+                .filter(([key]) => key !== 'rowIndex' && key !== Object.keys(currentTask.task)[0])
+                .forEach(([key, value]) => {
+                    const div = document.createElement('div');
+                    div.innerHTML = `<strong>${key}:</strong> ${value}`;
+                    taskDetails.appendChild(div);
+                });
+            
+            // Reset buttons
+            document.querySelectorAll('.score-button').forEach(btn => {
+                btn.classList.remove('selected');
+            });
+            
+            // Set selected state for already answered questions
+            if (currentTask.auditData.CE) {
+                document.querySelector(`.ce-score[data-score="${currentTask.auditData.CE}"]`).classList.add('selected');
+            }
+            if (currentTask.auditData.INT) {
+                document.querySelector(`.int-score[data-score="${currentTask.auditData.INT}"]`).classList.add('selected');
+            }
+            if (currentTask.auditData.ALI) {
+                document.querySelector(`.ali-score[data-score="${currentTask.auditData.ALI}"]`).classList.add('selected');
+            }
+            
+            // Update progress text
+            taskProgress.textContent = `${currentAuditIndex + 1} of ${tasksToAudit.length} tasks`;
+        }
+        
+        // Function to handle score selection
+        function handleScoreSelection(event) {
+            const button = event.target;
+            const score = parseInt(button.getAttribute('data-score'));
+            const category = button.classList.contains('ce-score') ? 'CE' : 
+                            button.classList.contains('int-score') ? 'INT' : 'ALI';
+            
+            // Update task data
+            tasksToAudit[currentAuditIndex].auditData[category] = score;
+            
+            // Update UI
+            document.querySelectorAll(`.${category.toLowerCase()}-score`).forEach(btn => {
+                btn.classList.remove('selected');
+            });
+            button.classList.add('selected');
+            
+            // Check if all questions are answered
+            const currentTask = tasksToAudit[currentAuditIndex];
+            if (currentTask.auditData.CE && currentTask.auditData.INT && currentTask.auditData.ALI) {
+                // Move to next task or complete
+                if (currentAuditIndex < tasksToAudit.length - 1) {
+                    currentAuditIndex++;
+                    displayCurrentTask();
+                } else {
+                    // Calculate results
+                    calculateResults();
+                    showStep(5);
+                }
+            }
+        }
+        
+        // Function to calculate productivity score based on PET
+        function calculateProductivityScore(PET) {
+            if (PET <= 0.7) {
+                return PET / 0.7;
+            } else if (PET <= 1) {
+                return 1 + (PET - 0.7) / 0.3;
+            } else if (PET <= 1.4) {
+                return 2 + (PET - 1) / 0.4;
+            } else {
+                return 3;
+            }
+        }
+        
+        // Function to calculate final results
+        function calculateResults() {
+            const results = {};
+            
+            // Group tasks by worker
+            tasksToAudit.forEach(({ worker, auditData }) => {
+                if (!results[worker]) {
+                    results[worker] = {
+                        CE: [],
+                        INT: [],
+                        ALI: []
+                    };
+                }
+                
+                results[worker].CE.push(auditData.CE);
+                results[worker].INT.push(auditData.INT);
+                results[worker].ALI.push(auditData.ALI);
+            });
+            
+            auditResults = results;
+            finalScores = {};
+            
+            // Calculate final scores
+            Object.entries(results).forEach(([worker, scores]) => {
+                const aCE = scores.CE.reduce((sum, val) => sum + val, 0) / scores.CE.length;
+                const aINT = scores.INT.reduce((sum, val) => sum + val, 0) / scores.INT.length;
+                const aALI = scores.ALI.reduce((sum, val) => sum + val, 0) / scores.ALI.length;
+                
+                const ATP = workerTasks[worker].length;
+                const EPT = parseFloat(expectedThroughput[worker]);
+                const PET = ATP / EPT;
+                const PS = calculateProductivityScore(PET);
+                
+                const overallScore = (aCE + aINT + aALI + PS) / 2;
+                
+                finalScores[worker] = {
+                    aCE,
+                    aINT,
+                    aALI,
+                    ATP,
+                    EPT,
+                    PET,
+                    PS,
+                    overallScore
+                };
+            });
+            
+            // Display results in table
+            displayResults();
+        }
+        
+        // Function to display results
+        function displayResults() {
+            resultsTable.innerHTML = '';
+            
+            Object.entries(finalScores).forEach(([worker, data]) => {
+                const row = document.createElement('tr');
+                
+                row.innerHTML = `
+                    <td class="worker-name">${worker}</td>
+                    <td>${data.aCE.toFixed(2)}</td>
+                    <td>${data.aINT.toFixed(2)}</td>
+                    <td>${data.aALI.toFixed(2)}</td>
+                    <td>${data.ATP}</td>
+                    <td>${data.EPT}</td>
+                    <td>${(data.PET * 100).toFixed(1)}%</td>
+                    <td>${data.PS.toFixed(2)}</td>
+                    <td class="overall-score">${data.overallScore.toFixed(2)}</td>
+                `;
+                
+                resultsTable.appendChild(row);
+            });
+        }
+        
+        // Function to show a specific step
+        function showStep(stepNumber) {
+            // Hide all steps
+            document.querySelectorAll('.step').forEach(step => {
+                step.classList.remove('active-step');
+            });
+            
+            // Show the requested step
+            document.getElementById(`step${stepNumber}`).classList.add('active-step');
+        }
+        
+        // Function to reset the application
+        function resetApp() {
+            fileData = null;
+            workers = [];
+            workerTasks = {};
+            expectedThroughput = {};
+            maxTasksPerWorker = 8;
+            auditPercentage = 25;
+            tasksToAudit = [];
+            currentAuditIndex = 0;
+            auditResults = {};
+            finalScores = {};
+            
+            // Reset input fields
+            fileInput.value = '';
+            maxTasksInput.value = '8';
+            auditPercentageInput.value = '25';
+        }
+    </script>
+</body>
+</html>
