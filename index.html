@@ -503,7 +503,6 @@
         </div>
         <div style="margin-top: 20px;">
             <button id="newAudit">Start New Audit</button>
-            <button id="downloadResults" style="background-color: #27ae60;">Download Results CSV</button>
             <button id="downloadJSON" style="background-color: #8e44ad;">Download Results JSON</button>
             <button id="exportHTML" style="background-color: #2980b9;">Export as HTML Table</button>
         </div>
@@ -547,7 +546,6 @@
                 showStep(1);
             });
             
-            document.getElementById('downloadResults').addEventListener('click', downloadResultsCSV);
             document.getElementById('downloadJSON').addEventListener('click', downloadResultsJSON);
             document.getElementById('exportHTML').addEventListener('click', exportAsHTMLTable);
             
@@ -948,116 +946,244 @@
             auditPercentageInput.value = '25';
         }
         
-        // Function to download results as CSV
-        function downloadResultsCSV() {
+        // Function to download results as JSON
+        function downloadResultsJSON() {
             if (!fileData || !tasksToAudit || tasksToAudit.length === 0) {
                 alert('No audit data available to download.');
                 return;
             }
             
             try {
-                // First, let's sanitize the original data to handle any newlines or special characters
-                const sanitizedData = fileData.map(row => {
-                    const newRow = {};
-                    // For each property in the row
-                    Object.keys(row).forEach(key => {
-                        // Replace any newlines with spaces
-                        if (typeof row[key] === 'string') {
-                            newRow[key] = row[key].replace(/\\n/g, ' ').replace(/\\r/g, ' ');
-                        } else {
-                            newRow[key] = row[key];
-                        }
-                    });
-                    return newRow;
+                // Create a map of audit data by row index
+                const auditedTasksMap = {};
+                tasksToAudit.forEach(taskAudit => {
+                    const rowIndex = taskAudit.task.rowIndex;
+                    if (taskAudit.auditData.CE !== null) {
+                        auditedTasksMap[rowIndex] = {
+                            worker: taskAudit.worker,
+                            CE_Score: taskAudit.auditData.CE,
+                            INT_Score: taskAudit.auditData.INT,
+                            ALI_Score: taskAudit.auditData.ALI
+                        };
+                    }
                 });
                 
-                // Get a clean list of column headers
-                const originalHeaders = Object.keys(sanitizedData[0]);
-                
-                // Create a table-like structure for our data
-                const table = [];
-                
-                // Add header row (first add our audit headers, then the original headers)
-                table.push(['CE_Score', 'INT_Score', 'ALI_Score', ...originalHeaders]);
-                
-                // Create a map for audit data
-                const auditDataByRow = {};
-                tasksToAudit.forEach(task => {
-                    const rowIndex = task.task.rowIndex;
-                    auditDataByRow[rowIndex] = {
-                        CE: task.auditData.CE !== null ? task.auditData.CE : '',
-                        INT: task.auditData.INT !== null ? task.auditData.INT : '',
-                        ALI: task.auditData.ALI !== null ? task.auditData.ALI : ''
-                    };
+                // Create enhanced data with audit scores
+                const enhancedData = fileData.map((row, index) => {
+                    // Start with a copy of the original row data
+                    const enhancedRow = {...row};
+                    
+                    // Add audit scores if this row was audited
+                    if (auditedTasksMap[index]) {
+                        enhancedRow.CE_Score = auditedTasksMap[index].CE_Score;
+                        enhancedRow.INT_Score = auditedTasksMap[index].INT_Score;
+                        enhancedRow.ALI_Score = auditedTasksMap[index].ALI_Score;
+                        enhancedRow.audited = true;
+                    } else {
+                        enhancedRow.CE_Score = null;
+                        enhancedRow.INT_Score = null;
+                        enhancedRow.ALI_Score = null;
+                        enhancedRow.audited = false;
+                    }
+                    
+                    return enhancedRow;
                 });
+                
+                // Create a complete results object
+                const resultsData = {
+                    auditDate: new Date().toISOString(),
+                    workers: Object.entries(finalScores).map(([worker, data]) => ({
+                        name: worker,
+                        averageScores: {
+                            CE: data.aCE,
+                            INT: data.aINT,
+                            ALI: data.aALI
+                        },
+                        throughput: {
+                            actual: data.ATP,
+                            expected: data.EPT,
+                            percentage: data.PET
+                        },
+                        productivityScore: data.PS,
+                        overallScore: data.overallScore
+                    })),
+                    tasks: enhancedData
+                };
+                
+                // Convert to JSON and download
+                const jsonString = JSON.stringify(resultsData, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.href = url;
+                link.download = 'audit_results.json';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                console.log('JSON export complete');
+            } catch (error) {
+                console.error('Error exporting JSON:', error);
+                alert('There was an error creating the JSON file. Please check the console for details.');
+            }
+        }
+        
+        // Function to export as HTML table
+        function exportAsHTMLTable() {
+            if (!fileData || !tasksToAudit || tasksToAudit.length === 0) {
+                alert('No audit data available to export.');
+                return;
+            }
+            
+            try {
+                // Create a map of audit data by row index
+                const auditedTasksMap = {};
+                tasksToAudit.forEach(taskAudit => {
+                    const rowIndex = taskAudit.task.rowIndex;
+                    if (taskAudit.auditData.CE !== null) {
+                        auditedTasksMap[rowIndex] = {
+                            worker: taskAudit.worker,
+                            CE_Score: taskAudit.auditData.CE,
+                            INT_Score: taskAudit.auditData.INT,
+                            ALI_Score: taskAudit.auditData.ALI
+                        };
+                    }
+                });
+                
+                // Get all column headers, including original and audit columns
+                const originalHeaders = Object.keys(fileData[0]);
+                const allHeaders = [...originalHeaders, 'CE_Score', 'INT_Score', 'ALI_Score', 'Worker'];
+                
+                // Generate HTML
+                let html = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Audit Results</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        table { border-collapse: collapse; width: 100%; }
+                        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                        th { background-color: #f2f2f2; }
+                        tr:nth-child(even) { background-color: #f9f9f9; }
+                        h1, h2 { color: #333; }
+                        .audited { background-color: #e8f4f8; }
+                        .summary { margin-bottom: 30px; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Audit Results</h1>
+                    
+                    <div class="summary">
+                        <h2>Summary</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Worker</th>
+                                    <th>Avg CE</th>
+                                    <th>Avg INT</th>
+                                    <th>Avg ALI</th>
+                                    <th>ATP</th>
+                                    <th>EPT</th>
+                                    <th>PET</th>
+                                    <th>PS</th>
+                                    <th>Overall Score</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                // Add worker summary data
+                Object.entries(finalScores).forEach(([worker, data]) => {
+                    html += `
+                        <tr>
+                            <td>${worker}</td>
+                            <td>${data.aCE.toFixed(2)}</td>
+                            <td>${data.aINT.toFixed(2)}</td>
+                            <td>${data.aALI.toFixed(2)}</td>
+                            <td>${data.ATP}</td>
+                            <td>${data.EPT}</td>
+                            <td>${(data.PET * 100).toFixed(1)}%</td>
+                            <td>${data.PS.toFixed(2)}</td>
+                            <td>${data.overallScore.toFixed(2)}</td>
+                        </tr>
+                    `;
+                });
+                
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <h2>Detailed Task Data</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                `;
+                
+                // Add header row
+                allHeaders.forEach(header => {
+                    html += `<th>${header}</th>`;
+                });
+                
+                html += `
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
                 
                 // Add data rows
-                sanitizedData.forEach((row, index) => {
-                    const newRow = [];
-                    
-                    // Add audit scores
-                    const auditData = auditDataByRow[index];
-                    if (auditData) {
-                        newRow.push(auditData.CE);
-                        newRow.push(auditData.INT);
-                        newRow.push(auditData.ALI);
-                    } else {
-                        newRow.push('', '', '');
-                    }
+                fileData.forEach((row, index) => {
+                    const wasAudited = auditedTasksMap[index] ? true : false;
+                    html += `<tr class="${wasAudited ? 'audited' : ''}">`;
                     
                     // Add original data
                     originalHeaders.forEach(header => {
-                        newRow.push(row[header] !== undefined ? row[header] : '');
+                        html += `<td>${row[header] !== undefined ? row[header] : ''}</td>`;
                     });
                     
-                    table.push(newRow);
-                });
-                
-                // Convert table to CSV with careful escaping
-                let csvContent = '';
-                table.forEach(row => {
-                    const processedRow = row.map(cell => {
-                        // If cell contains commas, quotes, or newlines, wrap in quotes and escape quotes
-                        if (cell !== null && cell !== undefined) {
-                            const cellStr = String(cell);
-                            if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\\n') || cellStr.includes('\\r')) {
-                                return `"${cellStr.replace(/"/g, '""')}"`;
-                            }
-                        }
-                        return cell !== undefined ? cell : '';
-                    });
-                    csvContent += processedRow.join(',') + '\\n';
-                });
-                
-                // Use a simple text file approach
-                const fileName = 'audit_results.csv';
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                
-                // Create download link
-                if (navigator.msSaveBlob) { // IE 10+
-                    navigator.msSaveBlob(blob, fileName);
-                } else {
-                    const link = document.createElement('a');
-                    if (link.download !== undefined) { // feature detection
-                        // Browsers that support HTML5 download attribute
-                        const url = URL.createObjectURL(blob);
-                        link.setAttribute('href', url);
-                        link.setAttribute('download', fileName);
-                        link.style.visibility = 'hidden';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        URL.revokeObjectURL(url);
+                    // Add audit data
+                    if (auditedTasksMap[index]) {
+                        html += `
+                            <td>${auditedTasksMap[index].CE_Score}</td>
+                            <td>${auditedTasksMap[index].INT_Score}</td>
+                            <td>${auditedTasksMap[index].ALI_Score}</td>
+                            <td>${auditedTasksMap[index].worker}</td>
+                        `;
                     } else {
-                        // Fallback
-                        window.open('data:text/csv;charset=utf-8,' + encodeURIComponent(csvContent));
+                        html += `<td></td><td></td><td></td><td></td>`;
                     }
-                }
+                    
+                    html += `</tr>`;
+                });
                 
-                console.log('CSV exported with sanitized data');
+                html += `
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 20px; color: #666;">
+                        Generated on ${new Date().toLocaleString()}
+                    </div>
+                </body>
+                </html>
+                `;
+                
+                // Create blob and download
+                const blob = new Blob([html], { type: 'text/html' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.href = url;
+                link.download = 'audit_results.html';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                console.log('HTML export complete');
             } catch (error) {
-                console.error('Error exporting CSV:', error);
-                alert('There was an error creating the CSV file. Please check the console for details.');
+                console.error('Error exporting HTML:', error);
+                alert('There was an error creating the HTML file. Please check the console for details.');
             }
         }
     </script>
