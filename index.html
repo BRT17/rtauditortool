@@ -172,7 +172,7 @@
     <!-- Step 2: Worker Identification -->
     <div id="step2" class="container step">
         <h2>Workers Identified</h2>
-        <p>The following workers were identified in the uploaded file:</p>
+        <p>The following workers were identified in the uploaded file. You can edit the task count if needed:</p>
         <ul id="workersList"></ul>
         <button id="continueToEPT">Continue</button>
     </div>
@@ -379,43 +379,84 @@
             });
         }
         
-        // Function to display workers
-        function displayWorkers() {
-            workersList.innerHTML = '';
+        // Function to display workers with editable task counts
+function displayWorkers() {
+    workersList.innerHTML = '';
+    
+    workers.forEach(worker => {
+        const li = document.createElement('li');
+        li.style.marginBottom = '10px';
+        
+        // Create an editable task count input
+        const taskCountSpan = document.createElement('span');
+        taskCountSpan.textContent = `${worker} - `;
+        
+        const taskCountInput = document.createElement('input');
+        taskCountInput.type = 'number';
+        taskCountInput.min = '1';
+        taskCountInput.value = workerTasks[worker].length;
+        taskCountInput.style.width = '60px';
+        taskCountInput.style.marginLeft = '5px';
+        taskCountInput.style.marginRight = '5px';
+        
+        const tasksLabel = document.createElement('span');
+        tasksLabel.textContent = ' tasks';
+        
+        // Add event listener to update tasks count
+        taskCountInput.addEventListener('change', (e) => {
+            const newCount = parseInt(e.target.value);
+            if (newCount < 1) {
+                e.target.value = 1;
+                return;
+            }
             
-            workers.forEach(worker => {
-                const li = document.createElement('li');
-                li.textContent = `${worker} - ${workerTasks[worker].length} tasks`;
-                workersList.appendChild(li);
-                
-                // Initialize expected throughput
-                expectedThroughput[worker] = '';
-            });
+            // If we're keeping the original tasks but changing the count
+            // Simply store the new count - it will be used for calculations later
+            const currentTasks = workerTasks[worker];
+            workerTasks[worker] = currentTasks.slice(0, Math.min(newCount, currentTasks.length));
             
-            // Create input fields for EPT
-            workerEPTInputs.innerHTML = '';
-            workers.forEach(worker => {
-                const div = document.createElement('div');
-                div.className = 'worker-entry';
-                
-                const label = document.createElement('label');
-                label.textContent = `${worker}:`;
-                label.setAttribute('for', `ept-${worker}`);
-                
-                const input = document.createElement('input');
-                input.type = 'number';
-                input.id = `ept-${worker}`;
-                input.min = '1';
-                input.placeholder = 'Expected tasks';
-                input.addEventListener('change', e => {
-                    expectedThroughput[worker] = e.target.value;
-                });
-                
-                div.appendChild(label);
-                div.appendChild(input);
-                workerEPTInputs.appendChild(div);
-            });
-        }
+            // If we need more tasks than we have, duplicate the last task as needed
+            if (newCount > currentTasks.length && currentTasks.length > 0) {
+                const lastTask = currentTasks[currentTasks.length - 1];
+                for (let i = currentTasks.length; i < newCount; i++) {
+                    workerTasks[worker].push({ ...lastTask });
+                }
+            }
+        });
+        
+        li.appendChild(taskCountSpan);
+        li.appendChild(taskCountInput);
+        li.appendChild(tasksLabel);
+        workersList.appendChild(li);
+        
+        // Initialize expected throughput
+        expectedThroughput[worker] = '';
+    });
+    
+    // Create input fields for EPT
+    workerEPTInputs.innerHTML = '';
+    workers.forEach(worker => {
+        const div = document.createElement('div');
+        div.className = 'worker-entry';
+        
+        const label = document.createElement('label');
+        label.textContent = `${worker}:`;
+        label.setAttribute('for', `ept-${worker}`);
+        
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.id = `ept-${worker}`;
+        input.min = '1';
+        input.placeholder = 'Expected tasks';
+        input.addEventListener('change', e => {
+            expectedThroughput[worker] = e.target.value;
+        });
+        
+        div.appendChild(label);
+        div.appendChild(input);
+        workerEPTInputs.appendChild(div);
+    });
+}
         
         // Function to start the audit
         function startAudit() {
