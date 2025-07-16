@@ -362,6 +362,7 @@
                     });
                     
                     workers = Object.keys(workersFound);
+                    workers.sort(); // Sort workers alphabetically
                     workerTasks = workersFound;
                     
                     if (workers.length === 0) {
