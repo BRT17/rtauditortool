@@ -156,6 +156,28 @@
         .overall-score {
             font-weight: bold;
         }
+        
+        .comment-section {
+            margin-top: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .comment-section label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .comment-section textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+            min-height: 80px;
+            font-family: Arial, sans-serif;
+            box-sizing: border-box;
+        }
     </style>
 </head>
 <body>
@@ -235,6 +257,11 @@
             </div>
         </div>
         
+        <div class="comment-section">
+            <label for="auditComment">Comments (Optional):</label>
+            <textarea id="auditComment" placeholder="Add any notes or observations about this task..."></textarea>
+        </div>
+        
         <div style="margin-top: 20px; display: flex; justify-content: space-between;">
             <button id="prevAudit" style="background-color: #7f8c8d;">Previous</button>
             <button id="confirmAudit" style="background-color: #27ae60; font-weight: bold; padding: 12px 20px;">Confirm & Continue</button>
@@ -267,7 +294,6 @@
         </div>
         <div style="margin-top: 20px;">
             <button id="newAudit">Start New Audit</button>
-            <button id="downloadJSON" style="background-color: #8e44ad;">Download Results JSON</button>
             <button id="exportHTML" style="background-color: #2980b9;">Export as HTML Table</button>
         </div>
     </div>
@@ -296,6 +322,7 @@
         const taskDetails = document.getElementById('taskDetails');
         const taskProgress = document.getElementById('taskProgress');
         const resultsTable = document.getElementById('resultsTable');
+        const auditCommentInput = document.getElementById('auditComment');
         
         // Set up event listeners
         document.addEventListener('DOMContentLoaded', () => {
@@ -310,7 +337,6 @@
                 showStep(1);
             });
             
-            document.getElementById('downloadJSON').addEventListener('click', downloadResultsJSON);
             document.getElementById('exportHTML').addEventListener('click', exportAsHTMLTable);
             
             // Score buttons
@@ -331,6 +357,13 @@
             
             auditPercentageInput.addEventListener('change', () => {
                 auditPercentage = parseInt(auditPercentageInput.value) || 25;
+            });
+            
+            // Save comment on change
+            auditCommentInput.addEventListener('input', () => {
+                if (tasksToAudit[currentAuditIndex]) {
+                    tasksToAudit[currentAuditIndex].auditData.comment = auditCommentInput.value;
+                }
             });
         });
         
@@ -495,7 +528,8 @@ function displayWorkers() {
                         auditData: {
                             CE: null,
                             INT: null,
-                            ALI: null
+                            ALI: null,
+                            comment: ''
                         }
                     });
                 });
@@ -544,6 +578,9 @@ function displayWorkers() {
             if (currentTask.auditData.ALI) {
                 document.querySelector(`.ali-score[data-score="${currentTask.auditData.ALI}"]`).classList.add('selected');
             }
+            
+            // Load comment
+            auditCommentInput.value = currentTask.auditData.comment || '';
             
             // Update navigation buttons
             document.getElementById('prevAudit').disabled = currentAuditIndex === 0;
@@ -607,6 +644,9 @@ function displayWorkers() {
                 return;
             }
             
+            // Save the comment
+            currentTask.auditData.comment = auditCommentInput.value;
+            
             // Move to next task or complete
             if (currentAuditIndex < tasksToAudit.length - 1) {
                 currentAuditIndex++;
@@ -621,6 +661,8 @@ function displayWorkers() {
         // Function to go to previous task
         function goToPreviousTask() {
             if (currentAuditIndex > 0) {
+                // Save current comment before moving
+                tasksToAudit[currentAuditIndex].auditData.comment = auditCommentInput.value;
                 currentAuditIndex--;
                 displayCurrentTask();
             }
@@ -629,6 +671,8 @@ function displayWorkers() {
         // Function to go to next task
         function goToNextTask() {
             if (currentAuditIndex < tasksToAudit.length - 1) {
+                // Save current comment before moving
+                tasksToAudit[currentAuditIndex].auditData.comment = auditCommentInput.value;
                 currentAuditIndex++;
                 displayCurrentTask();
             }
@@ -749,91 +793,7 @@ function displayWorkers() {
             fileInput.value = '';
             maxTasksInput.value = '8';
             auditPercentageInput.value = '25';
-        }
-        
-        // Function to download results as JSON
-        function downloadResultsJSON() {
-            if (!fileData || !tasksToAudit || tasksToAudit.length === 0) {
-                alert('No audit data available to download.');
-                return;
-            }
-            
-            try {
-                // Create a map of audit data by row index
-                const auditDataByRow = {};
-                tasksToAudit.forEach(taskAudit => {
-                    const rowIndex = taskAudit.task.rowIndex;
-                    if (taskAudit.auditData.CE !== null) {
-                        auditDataByRow[rowIndex] = {
-                            worker: taskAudit.worker,
-                            CE_Score: taskAudit.auditData.CE,
-                            INT_Score: taskAudit.auditData.INT,
-                            ALI_Score: taskAudit.auditData.ALI
-                        };
-                    }
-                });
-                
-                // Create enhanced data with audit scores
-                const enhancedData = fileData.map((row, index) => {
-                    // Start with a copy of the original row data
-                    const enhancedRow = {...row};
-                    
-                    // Add audit scores if this row was audited
-                    if (auditDataByRow[index]) {
-                        enhancedRow.CE_Score = auditDataByRow[index].CE_Score;
-                        enhancedRow.INT_Score = auditDataByRow[index].INT_Score;
-                        enhancedRow.ALI_Score = auditDataByRow[index].ALI_Score;
-                        enhancedRow.worker = auditDataByRow[index].worker;
-                        enhancedRow.audited = true;
-                    } else {
-                        enhancedRow.CE_Score = null;
-                        enhancedRow.INT_Score = null;
-                        enhancedRow.ALI_Score = null;
-                        enhancedRow.audited = false;
-                    }
-                    
-                    return enhancedRow;
-                });
-                
-                // Create a complete results object
-                const resultsData = {
-                    auditDate: new Date().toISOString(),
-                    workerSummary: Object.entries(finalScores).map(([worker, data]) => ({
-                        name: worker,
-                        averageScores: {
-                            CE: data.aCE,
-                            INT: data.aINT,
-                            ALI: data.aALI
-                        },
-                        throughput: {
-                            actual: data.ATP,
-                            expected: data.EPT,
-                            percentage: data.PET
-                        },
-                        productivityScore: data.PS,
-                        overallScore: data.overallScore
-                    })),
-                    taskData: enhancedData
-                };
-                
-                // Convert to JSON and download
-                const jsonString = JSON.stringify(resultsData, null, 2);
-                const blob = new Blob([jsonString], { type: 'application/json' });
-                
-                const link = document.createElement('a');
-                const url = URL.createObjectURL(blob);
-                link.href = url;
-                link.download = 'audit_results.json';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-                
-                console.log('JSON export complete');
-            } catch (error) {
-                console.error('Error exporting JSON:', error);
-                alert('There was an error creating the JSON file. Please check the console for details.');
-            }
+            auditCommentInput.value = '';
         }
         
         // Function to export as HTML table
@@ -853,7 +813,8 @@ function displayWorkers() {
                             worker: taskAudit.worker,
                             CE_Score: taskAudit.auditData.CE,
                             INT_Score: taskAudit.auditData.INT,
-                            ALI_Score: taskAudit.auditData.ALI
+                            ALI_Score: taskAudit.auditData.ALI,
+                            comment: taskAudit.auditData.comment || ''
                         };
                     }
                 });
@@ -872,134 +833,4 @@ function displayWorkers() {
                         h1, h2 { color: #333; }
                         table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
                         th, td { padding: 8px; text-align: left; border: 1px solid #ddd; }
-                        th { background-color: #f2f2f2; }
-                        tr:nth-child(even) { background-color: #f9f9f9; }
-                        .highlight { background-color: #e8f4f8; }
-                        .section { margin-bottom: 30px; }
-                    </style>
-                </head>
-                <body>
-                    <h1>Audit Results Report</h1>
-                    <p>Generated on: ${new Date().toLocaleString()}</p>
-                    
-                    <div class="section">
-                        <h2>Worker Summary</h2>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Worker</th>
-                                    <th>Avg CE</th>
-                                    <th>Avg INT</th>
-                                    <th>Avg ALI</th>
-                                    <th>Actual Throughput</th>
-                                    <th>Expected Throughput</th>
-                                    <th>PET (%)</th>
-                                    <th>Productivity Score</th>
-                                    <th>Overall Score</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-                
-                // Add worker summary rows
-                Object.entries(finalScores).forEach(([worker, data]) => {
-                    html += `
-                                <tr>
-                                    <td>${worker}</td>
-                                    <td>${data.aCE.toFixed(2)}</td>
-                                    <td>${data.aINT.toFixed(2)}</td>
-                                    <td>${data.aALI.toFixed(2)}</td>
-                                    <td>${data.ATP}</td>
-                                    <td>${data.EPT}</td>
-                                    <td>${(data.PET * 100).toFixed(1)}%</td>
-                                    <td>${data.PS.toFixed(2)}</td>
-                                    <td><strong>${data.overallScore.toFixed(2)}</strong></td>
-                                </tr>`;
-                });
-                
-                html += `
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <div class="section">
-                        <h2>Detailed Task Data</h2>
-                        <p>Highlighted rows were selected for audit.</p>
-                        <table>
-                            <thead>
-                                <tr>`;
-                
-                // Add original headers first
-                originalHeaders.forEach(header => {
-                    html += `<th>${header}</th>`;
-                });
-                
-                // Add audit score headers
-                html += `
-                                    <th>CE Score</th>
-                                    <th>INT Score</th>
-                                    <th>ALI Score</th>
-                                    <th>Auditor</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-                
-                // Add all rows with their data
-                fileData.forEach((row, index) => {
-                    const wasAudited = auditDataByRow[index] ? true : false;
-                    html += `<tr class="${wasAudited ? 'highlight' : ''}">`;
-                    
-                    // Add all original data columns
-                    originalHeaders.forEach(header => {
-                        let cellValue = row[header] !== undefined ? row[header] : '';
-                        // Sanitize the value to prevent HTML injection
-                        if (typeof cellValue === 'string') {
-                            cellValue = cellValue.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                        }
-                        html += `<td>${cellValue}</td>`;
-                    });
-                    
-                    // Add audit scores if available
-                    if (wasAudited) {
-                        html += `
-                                    <td>${auditDataByRow[index].CE_Score}</td>
-                                    <td>${auditDataByRow[index].INT_Score}</td>
-                                    <td>${auditDataByRow[index].ALI_Score}</td>
-                                    <td>Auditor</td>
-                                </tr>`;
-                    } else {
-                        html += `
-                                    <td></td>
-                                    <td></td>
-                                    <td></td>
-                                    <td></td>
-                                </tr>`;
-                    }
-                });
-                
-                html += `
-                            </tbody>
-                        </table>
-                    </div>
-                </body>
-                </html>`;
-                
-                // Create and download the HTML file
-                const blob = new Blob([html], { type: 'text/html' });
-                const link = document.createElement('a');
-                const url = URL.createObjectURL(blob);
-                link.href = url;
-                link.download = 'audit_results.html';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-                
-                console.log('HTML export complete');
-            } catch (error) {
-                console.error('Error exporting HTML:', error);
-                alert('There was an error creating the HTML report. Please check the console for details.');
-            }
-        }
-    </script>
-</body>
-</html>
+                        th
