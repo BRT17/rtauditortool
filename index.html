@@ -234,6 +234,12 @@
                 <button class="score-button ali-score" data-score="2">2</button>
             </div>
         </div>
+
+        <div style="margin-bottom: 15px;">
+    <h3>Optional Comments:</h3>
+    <textarea id="taskComment" placeholder="Add any additional comments about this task (optional)..." 
+              style="width: 100%; height: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; resize: vertical;"></textarea>
+        </div>
         
         <div style="margin-top: 20px; display: flex; justify-content: space-between;">
             <button id="prevAudit" style="background-color: #7f8c8d;">Previous</button>
@@ -318,6 +324,11 @@
             scoreButtons.forEach(button => {
                 button.addEventListener('click', handleScoreSelection);
             });
+
+            // Add event listener for comment field
+            document.getElementById('taskComment').addEventListener('input', function(event) {
+            tasksToAudit[currentAuditIndex].auditData.comment = event.target.value;
+            });
             
             // Audit navigation
             document.getElementById('confirmAudit').addEventListener('click', confirmAudit);
@@ -329,7 +340,7 @@
                 maxTasksPerWorker = parseInt(maxTasksInput.value) || 8;
             });
             
-            auditPercentageInput.addEventListener('change', () => {
+            auditPercentageInput.add('change', () => {
                 auditPercentage = parseInt(auditPercentageInput.value) || 25;
             });
         });
@@ -545,6 +556,10 @@ function displayWorkers() {
             if (currentTask.auditData.ALI) {
                 document.querySelector(`.ali-score[data-score="${currentTask.auditData.ALI}"]`).classList.add('selected');
             }
+
+            // Restore comment if it exists (ADD THIS)
+            const commentField = document.getElementById('taskComment');
+            commentField.value = currentTask.auditData.comment || '';
             
             // Update navigation buttons
             document.getElementById('prevAudit').disabled = currentAuditIndex === 0;
@@ -854,7 +869,8 @@ function displayWorkers() {
                             worker: taskAudit.worker,
                             CE_Score: taskAudit.auditData.CE,
                             INT_Score: taskAudit.auditData.INT,
-                            ALI_Score: taskAudit.auditData.ALI
+                            ALI_Score: taskAudit.auditData.ALI,
+                            Comment: taskAudit.auditData.comment || ''
                         };
                     }
                 });
@@ -939,6 +955,7 @@ function displayWorkers() {
                                     <th>CE Score</th>
                                     <th>INT Score</th>
                                     <th>ALI Score</th>
+                                    <th>Comments</th>
                                     <th>Auditor</th>
                                 </tr>
                             </thead>
@@ -965,10 +982,12 @@ function displayWorkers() {
                                     <td>${auditDataByRow[index].CE_Score}</td>
                                     <td>${auditDataByRow[index].INT_Score}</td>
                                     <td>${auditDataByRow[index].ALI_Score}</td>
+                                    <td>${sanitizedComment}</td>
                                     <td>Auditor</td>
                                 </tr>`;
                     } else {
                         html += `
+                                    <td></td>
                                     <td></td>
                                     <td></td>
                                     <td></td>
